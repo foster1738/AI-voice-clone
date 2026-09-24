@@ -88,6 +88,16 @@ export class Calls extends EventTarget {
 
   _beginCall() {
     this.engine.inCall = true;
+    // iOS only lets media play after a tap: start the remote audio element
+    // now, while we are still inside the user's tap, with a silent stream.
+    try {
+      if (!this.remoteAudio.srcObject) {
+        this.remoteAudio.srcObject = this.engine.ctx.createMediaStreamDestination().stream;
+        this.remoteAudio.play().catch(() => {});
+      }
+    } catch {
+      /* not needed on this platform */
+    }
     // Never play our own voice back during a call: it would echo to the caller.
     this._monitorBefore = this.engine.monitor;
     this.engine.setMonitor(false);

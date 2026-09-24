@@ -825,6 +825,7 @@ $('#outputSel').onchange = async (e) => {
   saveSettings();
   try {
     await engine.setOutputDevice(e.target.value);
+    await calls.setSpeaker(e.target.value);
   } catch (err) {
     toast(`Could not switch output: ${err.message}`);
   }

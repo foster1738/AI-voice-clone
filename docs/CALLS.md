@@ -42,7 +42,7 @@ App-to-app calls work as soon as the server runs. For users on strict mobile net
 | `APP_PASSWORD` | **Required.** Only people with this password can place calls on your account. |
 | `PUBLIC_URL` | `https://YOUR-SERVER`, the public URL Twilio calls (used for signature checks behind proxies) |
 | `ALLOWED_PREFIXES` | Optional. Allowed destinations, for example `+1,+44`. This protects your bill. |
-| `CLIENT_IDENTITY` | Optional, default `voxmorph` |
+| `CLIENT_IDENTITY` | Optional, default `voxmorph`. The server is meant for one person: incoming calls ring on whichever device last turned on *Receive calls*. Run one server per person if you want to share. |
 | `ALLOWED_ORIGINS` | Optional CORS allow-list if the app is hosted elsewhere, default `*` |
 
 In the app, open **Calls → ⚙️ Call server**, enter the password and tap *Connect*. Type a number in international format and tap **Call**. Turn on *Receive calls to my number in this app* to answer incoming calls with your changed voice while VoxMorph is open.
