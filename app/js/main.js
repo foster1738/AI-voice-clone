@@ -2,6 +2,7 @@ import { Engine } from './engine.js';
 import { PRESETS, DEFAULTS, resolveParams } from './presets.js';
 import { store, requestPersistence } from './storage.js';
 import { encodeWav, toMono, detectPitchTrack } from './dsp.js';
+import { Calls, randomId } from './calls.js';
 
 const VERSION = '1.0.0';
 const $ = (s) => document.querySelector(s);
@@ -65,6 +66,7 @@ document.querySelectorAll('.tabs button').forEach((b) =>
     document.querySelectorAll('.tab').forEach((t) => (t.hidden = t.dataset.tab !== b.dataset.go));
     if (b.dataset.go === 'settings') refreshDevices();
     if (b.dataset.go === 'ai') probeAI();
+    if (b.dataset.go === 'calls') refreshVirtualMic();
   }),
 );
 
@@ -107,6 +109,7 @@ function selectPreset(id) {
   applyParams();
   renderPresets();
   renderSliders();
+  renderCallVoices();
 }
 
 function applyParams() {
@@ -255,6 +258,7 @@ function updateStatus() {
 engine.addEventListener('mic', updateStatus);
 
 $('#liveBtn').onclick = async () => {
+  if (engine.inCall) return toast('You are in a call. Hang up on the Calls tab first.');
   if (engine.micOn) {
     if (recording) await stopRec();
     engine.stopMic();
@@ -434,7 +438,12 @@ async function takeAction(action, take, btn) {
     playingBtn = btn;
     btn.textContent = '⏹ Stop';
     applyParams();
-    await engine.play(take.data, take.sampleRate, { withVoice: action === 'voice', onEnded: reset });
+    try {
+      await engine.play(take.data, take.sampleRate, { withVoice: action === 'voice', onEnded: reset });
+    } catch (err) {
+      reset();
+      return toast(err.message);
+    }
     updateStatus();
   } else if (action === 'export') {
     btn.disabled = true;
@@ -892,6 +901,235 @@ async function autoProfileFromTakes() {
   setProfile(f[f.length >> 1]);
 }
 
+
+// ---------- calls ----------
+const calls = new Calls(engine, { micOptions });
+const callPrefs = ls.get('calls', { server: '', password: '', receive: false });
+
+function saveCallPrefs() {
+  ls.set('calls', callPrefs);
+}
+
+function renderCallVoices() {
+  const box = $('#callVoices');
+  if (!box) return;
+  box.innerHTML = '';
+  for (const p of allPresets().slice(0, 40)) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (p.id === state.presetId ? ' active' : '');
+    b.textContent = `${p.icon} ${p.name}`;
+    b.onclick = () => selectPreset(p.id);
+    box.append(b);
+  }
+}
+
+async function connectCallServer({ quiet = false } = {}) {
+  $('#serverState').textContent = 'Connecting…';
+  try {
+    const cfg = await calls.connect(callPrefs.server, callPrefs.password);
+    $('#serverState').textContent = `Connected · phone calls ${cfg.phone ? 'on' : 'off'} · app-to-app on`;
+    $('#phoneState').textContent = cfg.phone ? `Your caller ID: ${cfg.callerId}.` : 'Phone calling is not configured on the server yet.';
+    $('#dialBtn').disabled = !cfg.phone;
+    $('#receiveCalls').disabled = !cfg.phone;
+    if (cfg.phone && callPrefs.receive) enableReceive(true);
+    return cfg;
+  } catch (err) {
+    $('#serverState').textContent = 'Not connected';
+    $('#phoneState').textContent = 'Connect a call server to make calls (⚙️ Call server below).';
+    $('#dialBtn').disabled = false;
+    if (!quiet) toast(err.message, 5000);
+    return null;
+  }
+}
+
+async function ensureServer() {
+  if (calls.config) return calls.config;
+  const cfg = await connectCallServer();
+  if (!cfg) {
+    $('#serverCard').open = true;
+    throw new Error('Set up the call server first.');
+  }
+  return cfg;
+}
+
+async function enableReceive(on) {
+  callPrefs.receive = on;
+  saveCallPrefs();
+  $('#receiveCalls').checked = on;
+  if (!on) return;
+  try {
+    await calls.enablePhone();
+    toast('Incoming calls will ring here while VoxMorph is open.');
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+}
+
+let callTimer = null;
+calls.addEventListener('state', (e) => {
+  const st = e.detail;
+  $('#incomingCard').hidden = st.state !== 'incoming';
+  $('#incomingFrom').textContent = st.remote;
+  const active = st.state !== 'idle' && st.state !== 'incoming';
+  $('#callCard').hidden = !active;
+  $('#callRemote').textContent = st.kind === 'p2p' ? `Call code ${st.remote}` : st.remote;
+  $('#callState').textContent =
+    { connecting: 'Connecting…', ringing: 'Ringing…', 'in-call': 'On call · live voice', waiting: 'Waiting for the other person…' }[st.state] || '';
+  $('#muteBtn').setAttribute('aria-pressed', String(st.muted));
+  $('#keypadBtn').hidden = st.kind !== 'phone';
+  clearInterval(callTimer);
+  if (st.state === 'in-call') {
+    const tick = () => {
+      const s = Math.floor((Date.now() - st.since) / 1000);
+      $('#callTimer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+    tick();
+    callTimer = setInterval(tick, 1000);
+  } else {
+    $('#callTimer').textContent = '';
+  }
+  if (st.state === 'incoming') {
+    document.querySelector('[data-go=calls]').click();
+    if (navigator.vibrate) navigator.vibrate([400, 200, 400]);
+  }
+  $('#status').textContent = active ? 'On call' : engine.micOn ? 'Live' : 'Mic off';
+  $('#status').className = 'status' + (active ? ' live' : '');
+  if (!active) updateStatus();
+});
+calls.addEventListener('error', (e) => toast(e.detail, 6000));
+
+$('#dialBtn').onclick = async () => {
+  try {
+    await ensureServer();
+    await calls.dial($('#dialInput').value);
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+};
+$('#dialInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#dialBtn').click();
+});
+$('#receiveCalls').onchange = async (e) => {
+  try {
+    await ensureServer();
+    await enableReceive(e.target.checked);
+  } catch (err) {
+    e.target.checked = false;
+    toast(err.message);
+  }
+};
+$('#answerBtn').onclick = () => calls.answer().catch((err) => toast(err.message));
+$('#declineBtn').onclick = () => calls.decline();
+$('#hangBtn').onclick = () => calls.hangup();
+$('#muteBtn').onclick = () => calls.mute(!calls.status.muted);
+$('#keypadBtn').onclick = () => ($('#keypad').hidden = !$('#keypad').hidden);
+for (const d of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']) {
+  const b = document.createElement('button');
+  b.textContent = d;
+  b.onclick = () => calls.sendDigits(d);
+  $('#keypad').append(b);
+}
+
+async function joinRoom(code) {
+  try {
+    await ensureServer();
+    await calls.joinRoom(code);
+    applyParams();
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+}
+
+$('#newRoomBtn').onclick = async () => {
+  const code = randomId(8);
+  await joinRoom(code);
+  if (calls.status.kind !== 'p2p') return;
+  const link = calls.roomLink(code);
+  const text = `Join my VoxMorph call: ${link} (code ${code})`;
+  try {
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'VoxMorph call', text, url: link });
+    else {
+      await navigator.clipboard.writeText(link);
+      toast(`Link copied. Call code: ${code}`, 6000);
+    }
+  } catch {
+    toast(`Call code: ${code}`, 8000);
+  }
+};
+$('#joinBtn').onclick = () => joinRoom($('#roomInput').value);
+
+$('#serverUrl').value = callPrefs.server;
+$('#serverPass').value = callPrefs.password;
+$('#serverBtn').onclick = () => {
+  callPrefs.server = $('#serverUrl').value.trim();
+  callPrefs.password = $('#serverPass').value;
+  saveCallPrefs();
+  calls.config = null;
+  connectCallServer();
+};
+
+// Virtual microphone for every app on a computer.
+const CABLES = [/cable input/i, /blackhole/i, /voxmorph/i, /voicemeeter input/i, /loopback/i, /soundflower/i];
+
+async function refreshVirtualMic() {
+  const native = window.voxmorphNative;
+  $('#vmicCreate').hidden = !(native && native.platform === 'linux');
+  if (!navigator.mediaDevices?.enumerateDevices) return null;
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const outs = devs.filter((d) => d.kind === 'audiooutput');
+  const cable = outs.find((d) => CABLES.some((r) => r.test(d.label)));
+  const canSink = typeof (window.AudioContext && AudioContext.prototype.setSinkId) === 'function';
+  let msg;
+  if (!canSink) msg = 'This browser cannot choose an output. Use Chrome, Edge or the VoxMorph desktop app.';
+  else if (cable) msg = `✅ Found virtual microphone: ${cable.label}`;
+  else if (!outs.some((d) => d.label)) msg = 'Tap the button to detect your virtual microphone.';
+  else msg = 'No virtual audio cable found yet. Install one (step 1), then restart VoxMorph.';
+  $('#vmicStatus').textContent = msg;
+  return canSink ? cable : null;
+}
+
+$('#vmicBtn').onclick = async () => {
+  if (!engine.micOn && !(await startLive())) return;
+  const cable = await refreshVirtualMic();
+  if (!cable) return toast('No virtual microphone found. See step 1.', 5000);
+  try {
+    await engine.setOutputDevice(cable.deviceId);
+    state.settings.output = cable.deviceId;
+    saveSettings();
+    engine.setMonitor(true);
+    updateStatus();
+    toast(`Your voice now goes to “${cable.label}”. Pick it as the microphone in your calling app.`, 6000);
+  } catch (err) {
+    toast(`Could not use the virtual microphone: ${err.message}`, 5000);
+  }
+};
+
+$('#vmicCreate').onclick = async () => {
+  try {
+    await window.voxmorphNative.createVirtualMic();
+    toast('Created “VoxMorph Microphone”.');
+    await refreshVirtualMic();
+  } catch (err) {
+    toast(err.message, 5000);
+  }
+};
+
+function openCallLink() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const code = h.get('call');
+  if (!code) return;
+  if (h.get('server') !== null) {
+    callPrefs.server = h.get('server');
+    saveCallPrefs();
+    $('#serverUrl').value = callPrefs.server;
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+  document.querySelector('[data-go=calls]').click();
+  $('#roomInput').value = code;
+  toast('Tap Join to enter the call.', 6000);
+}
+window.addEventListener('hashchange', openCallLink);
+
 // ---------- install / PWA ----------
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -934,9 +1172,12 @@ function boot() {
   renderTakes().then(autoProfileFromTakes);
   if (state.settings.output) engine.setOutputDevice(state.settings.output).catch(() => {});
   if (!window.isSecureContext) toast('The microphone needs HTTPS (or localhost).', 6000);
+  renderCallVoices();
+  connectCallServer({ quiet: true });
+  openCallLink();
 }
 
 boot();
 
 // Expose for automated tests / debugging.
-window.voxmorph = { engine, state, selectPreset, setProfile };
+window.voxmorph = { engine, state, selectPreset, setProfile, calls };

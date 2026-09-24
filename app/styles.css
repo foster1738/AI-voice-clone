@@ -527,7 +527,7 @@ select {
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   background: rgba(19, 19, 31, 0.95);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
@@ -584,4 +584,106 @@ select {
   .presets {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
+}
+
+.chip.ok {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.chip.danger {
+  background: var(--rec);
+  border-color: var(--rec);
+  color: #fff;
+}
+
+.dial {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.dial input,
+.form input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  font-size: 1.05rem;
+}
+
+.dial .chip {
+  padding: 0 20px;
+  font-size: 1rem;
+}
+
+.call-live {
+  border-color: var(--ok);
+  background: linear-gradient(160deg, rgba(34, 197, 94, 0.15), var(--card));
+}
+
+.call-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.call-who strong {
+  font-size: 1.4rem;
+}
+
+.call-actions {
+  justify-content: center;
+  gap: 16px;
+}
+
+.call-actions .round-btn {
+  height: 70px;
+}
+
+.round-btn.hang {
+  background: var(--rec);
+  border-color: var(--rec);
+}
+
+.voice-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 10px;
+}
+
+.voice-strip .chip {
+  flex: none;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 260px;
+  margin: 0 auto 10px;
+}
+
+.keypad button {
+  padding: 12px;
+  font-size: 1.2rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+}
+
+.card summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+a {
+  color: var(--accent2);
 }

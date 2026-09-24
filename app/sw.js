@@ -1,5 +1,5 @@
 // Offline support: cache the app shell; AI runtime files are cached on first use.
-const CACHE = 'voxmorph-v1';
+const CACHE = 'voxmorph-v2';
 const SHELL = [
   './',
   'index.html',
@@ -16,6 +16,8 @@ const SHELL = [
   'js/dsp.js',
   'js/ai.js',
   'js/ai-worker.js',
+  'js/calls.js',
+  'vendor/twilio/twilio.min.js',
   'js/worklets/voice-processor.js',
   'js/worklets/denoise-processor.js',
   'js/worklets/recorder-processor.js',
@@ -42,6 +44,8 @@ self.addEventListener('fetch', (e) => {
   const sameOrigin = url.origin === self.location.origin;
   const ortCdn = url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('onnxruntime-web');
   if (!sameOrigin && !ortCdn) return;
+  // Live call APIs must never be cached.
+  if (sameOrigin && (url.pathname.includes('/api/') || url.pathname.includes('/twilio/'))) return;
   // Network first for our own files (so updates land), cache fallback offline.
   // Cache first for the versioned AI runtime on the CDN.
   if (ortCdn) {

@@ -1,0 +1,26 @@
+# One-click deploy on Render (https://render.com): New -> Blueprint -> this repo.
+services:
+  - type: web
+    name: voxmorph
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/config
+    envVars:
+      - key: APP_PASSWORD
+        generateValue: true
+      - key: PUBLIC_URL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_API_KEY
+        sync: false
+      - key: TWILIO_API_SECRET
+        sync: false
+      - key: TWILIO_TWIML_APP_SID
+        sync: false
+      - key: TWILIO_CALLER_ID
+        sync: false
+      - key: ALLOWED_PREFIXES
+        sync: false

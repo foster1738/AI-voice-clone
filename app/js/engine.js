@@ -15,6 +15,9 @@ export class Engine extends EventTarget {
     this.recording = null;
     this.params = null;
     this.denoise = true;
+    this.ownsStream = false;
+    this.inCall = false;
+    this.callDest = null;
   }
 
   async init() {
@@ -101,23 +104,48 @@ export class Engine extends EventTarget {
       latency: 0,
     };
     if (deviceId) audio.deviceId = { exact: deviceId };
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio });
-    this.micSource = this.ctx.createMediaStreamSource(this.stream);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio });
+    this._attach(stream, true);
+  }
+
+  /** Use a microphone stream opened by someone else (e.g. the phone-call SDK). */
+  async attachStream(stream) {
+    await this.resume();
+    this.stopMic();
+    this.stopPreview();
+    this._attach(stream, false);
+  }
+
+  _attach(stream, owned) {
+    this.stream = stream;
+    this.ownsStream = owned;
+    this.micSource = this.ctx.createMediaStreamSource(stream);
     this.micSource.connect(this.chain.input);
     this.dispatchEvent(new Event('mic'));
   }
 
   stopMic() {
     if (this.micSource) this.micSource.disconnect();
-    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+    if (this.stream && this.ownsStream) this.stream.getTracks().forEach((t) => t.stop());
     this.micSource = null;
     this.stream = null;
     try {
-      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      if (navigator.audioSession && !this.inCall) navigator.audioSession.type = 'playback';
     } catch {
       /* not supported */
     }
     this.dispatchEvent(new Event('mic'));
+  }
+
+  /** The changed voice as a MediaStream, ready to send into a call. */
+  async callStream() {
+    await this.init();
+    if (!this.callDest) {
+      this.callDest = this.ctx.createMediaStreamDestination();
+      this.callDest.channelCount = 1;
+      this.chain.output.connect(this.callDest);
+    }
+    return this.callDest.stream;
   }
 
   get micOn() {
@@ -156,6 +184,7 @@ export class Engine extends EventTarget {
 
   /** Play mono audio. `withVoice` routes it through the effect chain. */
   async play(data, sampleRate, { withVoice = true, onEnded } = {}) {
+    if (this.inCall) throw new Error('Playback is paused during a call.');
     await this.resume();
     this.stopPreview();
     if (this.micOn) this.stopMic();

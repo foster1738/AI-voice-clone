@@ -62,6 +62,84 @@
         </details>
       </section>
 
+      <!-- CALLS -->
+      <section class="tab" data-tab="calls" hidden>
+        <h2>Calls with your new voice</h2>
+        <p class="hint">The voice you pick is applied live, and you can switch voices mid-call.</p>
+
+        <div class="card call-live" id="incomingCard" hidden>
+          <div class="call-who"><small>Incoming call</small><strong id="incomingFrom"></strong></div>
+          <div class="row">
+            <button class="chip danger" id="declineBtn">Decline</button>
+            <button class="chip ok" id="answerBtn">Answer with my voice</button>
+          </div>
+        </div>
+
+        <div class="card call-live" id="callCard" hidden>
+          <div class="call-who"><small id="callState">Calling…</small><strong id="callRemote"></strong><span id="callTimer" class="muted">0:00</span></div>
+          <div class="voice-strip" id="callVoices"></div>
+          <div class="keypad" id="keypad" hidden></div>
+          <div class="row call-actions">
+            <button class="round-btn" id="muteBtn" aria-pressed="false">🔇<small>Mute</small></button>
+            <button class="round-btn" id="keypadBtn">🔢<small>Keypad</small></button>
+            <button class="round-btn hang" id="hangBtn">📵<small>Hang up</small></button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📞 Call any phone number</h3>
+          <p class="hint">Works on iPhone, Android, Windows and Mac. The call goes out through your call server with its caller ID. <span id="phoneState"></span></p>
+          <div class="dial">
+            <input id="dialInput" type="tel" inputmode="tel" autocomplete="tel" placeholder="+1 415 555 0123" />
+            <button id="dialBtn" class="chip ok">Call</button>
+          </div>
+          <label class="switch"><input type="checkbox" id="receiveCalls" /> <span>Receive calls to my number in this app</span></label>
+        </div>
+
+        <div class="card">
+          <h3>🔗 Free app-to-app call</h3>
+          <p class="hint">Call another VoxMorph user over the internet. Both of you can use any voice.</p>
+          <div class="row">
+            <button id="newRoomBtn" class="chip primary">Start a call &amp; share link</button>
+          </div>
+          <div class="dial">
+            <input id="roomInput" placeholder="Enter call code" autocapitalize="off" autocomplete="off" />
+            <button id="joinBtn" class="chip">Join</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🖥️ Every app on this computer</h3>
+          <p class="hint">Zoom, Teams, Discord, WhatsApp/Telegram desktop, Skype, Google Meet, OBS, games. Also <b>normal phone calls</b> through <b>Phone Link</b> (Windows + Android/iPhone) or <b>iPhone calls on your Mac</b>.</p>
+          <div id="vmicStatus" class="muted"></div>
+          <div class="row">
+            <button id="vmicBtn" class="chip primary">Send my voice to the virtual microphone</button>
+            <button id="vmicCreate" class="chip" hidden>Create VoxMorph microphone</button>
+          </div>
+          <ol class="steps small">
+            <li>One-time setup: install <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener">VB-Audio Cable</a> (Windows) or <a href="https://existential.audio/blackhole/" target="_blank" rel="noopener">BlackHole 2ch</a> (Mac). On Linux the desktop app creates the microphone for you.</li>
+            <li>Tap the button above and keep VoxMorph running.</li>
+            <li>In the calling app, set the microphone to <b>CABLE Output</b> / <b>BlackHole 2ch</b> / <b>VoxMorph Microphone</b>. For Phone Link: Settings → Calls → microphone.</li>
+          </ol>
+        </div>
+
+        <details class="card">
+          <summary>📱 Why not inside the phone's own Phone or WhatsApp app?</summary>
+          <p class="hint">iOS and Android do not let any app change the microphone of the built-in dialer or of other apps; this protects every phone call from being altered or recorded by third parties. Voice changer call apps work around it the same way VoxMorph does: the call is placed <b>from inside the app</b> (above), so the other person can be on any normal phone.</p>
+        </details>
+
+        <details class="card" id="serverCard">
+          <summary>⚙️ Call server</summary>
+          <p class="hint">Calls use your own VoxMorph server (see <b>docs/CALLS.md</b>). Leave the URL empty if this page is served by it.</p>
+          <div class="form">
+            <label>Server URL <input id="serverUrl" placeholder="https://my-voxmorph.example.com" autocapitalize="off" /></label>
+            <label>App password <input id="serverPass" type="password" autocomplete="current-password" /></label>
+          </div>
+          <div class="row"><button id="serverBtn" class="chip primary">Connect</button><span id="serverState" class="muted"></span></div>
+        </details>
+        <p class="hint small">Use voice changing responsibly: don't use it to deceive, harass or defraud anyone. Recording calls may require everyone's consent where you live.</p>
+      </section>
+
       <!-- STUDIO -->
       <section class="tab" data-tab="studio" hidden>
         <div class="row between">
@@ -146,8 +224,9 @@
 
     <nav class="tabs">
       <button data-go="live" class="active"><span>🎙️</span>Live</button>
+      <button data-go="calls"><span>📞</span>Calls</button>
       <button data-go="studio"><span>🎚️</span>Studio</button>
-      <button data-go="ai"><span>🧠</span>AI Voices</button>
+      <button data-go="ai"><span>🧠</span>AI</button>
       <button data-go="settings"><span>⚙️</span>Settings</button>
     </nav>
 

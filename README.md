@@ -10,7 +10,7 @@ VoxMorph is a voice changer for **iPhone, Android, Windows and macOS**, built fr
 | 🎙️ **Real-time voice changer** | Pitch-synchronous engine (TD-PSOLA) with independent **pitch** and **formant** control, so a gender change sounds like a person, not a chipmunk. Also includes robot mode, hard-tune (pitch snap to a scale), whisper and bit-crush. |
 | 🎛️ **29 voices + full editor** | Everyday, Fun, Sci-Fi, Horror, Music and Places. There are 24 controls: EQ, distortion, ring mod, chorus, echo, reverb and filters. You can save your own voices. |
 | 🎚️ **Studio** | Record once and try every voice on it. Import audio files, export WAV, or share straight to other apps from your phone. |
-| 🎮 **Use it in Discord, Zoom, OBS and games** | Choose an output device (for example a virtual audio cable) so other apps hear your changed voice. |
+| 📞 **Live voice changing on calls** | **Call any phone number** (and receive calls) from the app, with the other person hearing your changed voice in real time. There are also **free app-to-app calls**. On computers, a **virtual microphone** works in Zoom, Teams, Discord, Meet, WhatsApp desktop and games, and in normal cellular calls through Phone Link or iPhone-on-Mac. See [docs/CALLS.md](docs/CALLS.md). |
 
 ## Install
 
@@ -43,21 +43,22 @@ Then go to **Studio**, find a recording and tap **🧠 AI convert**. Settings:
 
 Only use voice models you have the right to use, and don't impersonate real people without their consent.
 
-## Use your new voice in other apps (desktop)
-1. Install a virtual audio cable: [VB-Audio Cable](https://vb-audio.com/Cable/) on Windows or [BlackHole](https://existential.audio/blackhole/) on Mac.
-2. In VoxMorph, go to **Settings → Output**, pick the cable, then turn on **🎧 Monitor**.
-3. In Discord, Zoom, OBS or your game, set the microphone to the cable ("CABLE Output" or "BlackHole 2ch").
+## Real-time calls
+The full setup guide is in **[docs/CALLS.md](docs/CALLS.md)**.
 
-Choosing an output device needs Chrome, Edge or the desktop app. On phones, the system doesn't let apps inject audio into other apps' microphones. Record in Studio and share the file instead.
+- **Phone calls (all devices):** deploy the included server (`render.yaml` or the `Dockerfile`) and add a Twilio number. Then dial any number from **Calls**, or answer incoming calls, with your changed voice live.
+- **App-to-app (all devices, free):** tap *Start a call & share link* and send the link.
+- **Every app on a computer:** install VB-Audio Cable (Windows) or BlackHole (Mac); the Linux desktop app creates its own mic. Tap *Send my voice to the virtual microphone*, then pick that microphone in Zoom, Teams, Discord, WhatsApp desktop, Phone Link, FaceTime and so on.
+- **Phone's built-in dialer and WhatsApp on iOS/Android:** not possible for any app. The OS blocks access to their audio, which is why VoxMorph places the call itself.
 
 ## Development
 
 ```bash
 npm install          # set ELECTRON_SKIP_BINARY_DOWNLOAD=1 if you only need the web app
-npm start            # http://localhost:8080
-npm test             # DSP + AI pipeline unit tests
+npm start            # app + call server at http://localhost:8080
+npm test             # DSP, AI pipeline and call-server tests
 npm run vendor       # bundle ONNX Runtime for offline/desktop use
-npm run test:e2e     # drives the app in Chromium with a fake microphone
+npm run test:e2e     # drives the app in Chromium with a fake mic, including a live call between two windows
 npm run desktop      # run the Electron desktop app
 ```
 
@@ -85,6 +86,8 @@ recording ─► 16 kHz ─► ContentVec features ┐
 | `app/js/chain.js` | Effect chain, shared by live playback and offline export |
 | `app/js/ai.js`, `app/js/ai-worker.js` | RVC voice conversion pipeline, run in a Web Worker |
 | `app/js/presets.js` | Voices and Voice Match retargeting |
+| `app/js/calls.js` | Phone calls (Twilio AudioProcessor hook) and app-to-app WebRTC calls |
+| `server/index.mjs` | App server, Twilio tokens and webhook, WebRTC signaling (no dependencies) |
 | `desktop/main.cjs` | Electron wrapper (Windows/macOS/Linux) |
 | `tests/` | Unit tests, end-to-end test, stub ONNX models (`fixtures/make_models.py`) |
 
@@ -92,4 +95,4 @@ recording ─► 16 kHz ─► ContentVec features ┐
 - Live mode uses the DSP engine plus AI denoise, with about 60 ms latency. RVC conversion works on recordings, not live. Real-time RVC needs a strong GPU and more latency.
 - Full-size ContentVec encoders are about 200–400 MB. They run well on desktops and recent phones, but older phones may run out of memory.
 
-Third-party code: RNNoise WASM build from `@jitsi/rnnoise-wasm` (Apache-2.0 / BSD, `app/vendor/rnnoise/LICENSE`) and ONNX Runtime Web (MIT).
+Third-party code: RNNoise WASM build from `@jitsi/rnnoise-wasm` (Apache-2.0 / BSD, `app/vendor/rnnoise/LICENSE`), Twilio Voice JS SDK (`app/vendor/twilio/LICENSE.md`) and ONNX Runtime Web (MIT).

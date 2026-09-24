@@ -1,8 +1,9 @@
 // Desktop app (Windows / macOS / Linux) — wraps the web app in Electron.
 // Serves app/ from a privileged app:// origin so AudioWorklets, WebAssembly,
 // threads (cross-origin isolation) and WebGPU all work offline.
-const { app, BrowserWindow, protocol, net, session, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, protocol, net, session, shell, systemPreferences, ipcMain } = require('electron');
 const path = require('node:path');
+const { execFile } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
 const ROOT = path.join(__dirname, '..', 'app');
@@ -24,6 +25,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
       backgroundThrottling: false, // keep the voice running while minimised
     },
   });
@@ -63,6 +65,39 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// Linux: create a system-wide "VoxMorph Microphone" (PulseAudio / PipeWire).
+// VoxMorph plays the changed voice into "VoxMorph Output"; every app can then
+// pick "VoxMorph Microphone" as its mic. Windows/macOS use VB-Cable/BlackHole.
+function pactl(args) {
+  return new Promise((resolve, reject) => {
+    execFile('pactl', args, (err, stdout) => (err ? reject(err) : resolve(stdout)));
+  });
+}
+
+ipcMain.handle('virtual-mic:create', async () => {
+  if (process.platform !== 'linux') throw new Error('Install VB-Audio Cable (Windows) or BlackHole (Mac).');
+  let sinks = '';
+  try {
+    sinks = await pactl(['list', 'short', 'sinks']);
+  } catch {
+    throw new Error('pactl not found. Install pulseaudio-utils (works with PipeWire too).');
+  }
+  if (!sinks.includes('voxmorph_out')) {
+    await pactl(['load-module', 'module-null-sink', 'sink_name=voxmorph_out', 'sink_properties=device.description=VoxMorph_Output']);
+  }
+  const sources = await pactl(['list', 'short', 'sources']);
+  if (!sources.includes('voxmorph_mic')) {
+    await pactl([
+      'load-module',
+      'module-remap-source',
+      'master=voxmorph_out.monitor',
+      'source_name=voxmorph_mic',
+      'source_properties=device.description=VoxMorph_Microphone',
+    ]);
+  }
+  return true;
 });
 
 app.on('window-all-closed', () => {

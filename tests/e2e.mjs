@@ -11,6 +11,11 @@ import assert from 'node:assert/strict';
 import { encodeWav, decodeWavPcm, detectPitchTrack } from '../app/js/dsp.js';
 import { loadPlaywright } from '../scripts/playwright.mjs';
 
+function medianOf(track) {
+  const v = Array.from(track).filter((f) => f > 0).sort((a, b) => a - b);
+  return v.length ? v[v.length >> 1] : 0;
+}
+
 const shotsArg = process.argv.indexOf('--shots');
 const shots = shotsArg > 0 ? process.argv[shotsArg + 1] : null;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -29,8 +34,19 @@ const micWav = join(tmp, 'mic.wav');
 writeFileSync(micWav, Buffer.from(encodeWav([voice], sr)));
 
 const port = 8765;
-const server = spawn(process.execPath, [fileURLToPath(new URL('../scripts/serve.mjs', import.meta.url))], {
-  env: { ...process.env, PORT: String(port) },
+// Fake Twilio credentials: enough for the server to hand out tokens. The
+// Twilio SDK itself is replaced by a stand-in inside the page.
+const server = spawn(process.execPath, [fileURLToPath(new URL('../server/index.mjs', import.meta.url))], {
+  env: {
+    ...process.env,
+    PORT: String(port),
+    TWILIO_ACCOUNT_SID: 'AC00000000000000000000000000000000',
+    TWILIO_API_KEY: 'SK00000000000000000000000000000000',
+    TWILIO_API_SECRET: 'secret',
+    TWILIO_TWIML_APP_SID: 'AP00000000000000000000000000000000',
+    TWILIO_CALLER_ID: '+15550001111',
+    APP_PASSWORD: 'e2e-pass',
+  },
   stdio: 'ignore',
 });
 await new Promise((r) => setTimeout(r, 600));
@@ -124,6 +140,118 @@ try {
   const kind = await page.locator('.take .kind').first().textContent();
   assert.match(kind, /AI/);
   ok(`AI conversion produced a new take (${kind.trim()})`);
+
+
+  step = 'phone-call';
+  // Stand-in for the Twilio SDK that honours the AudioProcessor contract:
+  // it hands the processor a mic stream and "sends" whatever comes back.
+  await page.evaluate(() => {
+    class FakeCall extends EventTarget {
+      constructor(params) {
+        super();
+        this.parameters = params;
+        this.muted = false;
+      }
+      on(ev, fn) {
+        this.addEventListener(ev, () => fn());
+      }
+      mute(m) {
+        this.muted = m;
+      }
+      sendDigits(d) {
+        window.__digits = (window.__digits || '') + d;
+      }
+      disconnect() {
+        window.__processor.destroyProcessedStream(window.__sent);
+        this.dispatchEvent(new Event('disconnect'));
+      }
+    }
+    class FakeDevice {
+      constructor(token) {
+        window.__token = token;
+        this.audio = { addProcessor: async (p) => (window.__processor = p) };
+      }
+      on() {}
+      async register() {}
+      async connect({ params }) {
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        window.__sent = await window.__processor.createProcessedStream(mic);
+        const call = new FakeCall(params);
+        window.__call = call;
+        setTimeout(() => call.dispatchEvent(new Event('accept')), 100);
+        return call;
+      }
+    }
+    window.Twilio = { Device: FakeDevice };
+  });
+  await page.click('[data-go=calls]');
+  await page.evaluate(() => (document.querySelector('#serverCard').open = true));
+  await page.fill('#serverPass', 'e2e-pass');
+  await page.click('#serverBtn');
+  await page.waitForFunction(() => /phone calls on/.test(document.querySelector('#serverState').textContent));
+  await page.evaluate(() => {
+    window.voxmorph.state.profile = null;
+    window.voxmorph.selectPreset('deep');
+  });
+  await page.fill('#dialInput', '+1 415 555 0123');
+  await page.click('#dialBtn');
+  await page.waitForFunction(() => /On call/.test(document.querySelector('#callState').textContent));
+  const phone = await page.evaluate(async () => {
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    const an = ctx.createAnalyser();
+    an.fftSize = 32768;
+    ctx.createMediaStreamSource(window.__sent).connect(an);
+    await new Promise((r) => setTimeout(r, 1500));
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    return { samples: Array.from(buf), to: window.__call.parameters.To, token: window.__token.split('.').length };
+  });
+  const phonePitch = medianOf(detectPitchTrack(Float32Array.from(phone.samples), 48000, 100));
+  assert.equal(phone.to, '+14155550123');
+  assert.equal(phone.token, 3);
+  // Deep Voice without calibration is -5 st: 140 Hz -> ~105 Hz.
+  assert.ok(phonePitch > 92 && phonePitch < 118, `phone call pitch ${phonePitch}`);
+  ok(`phone call: caller hears the changed voice (${phonePitch.toFixed(0)} Hz from 140 Hz mic)`);
+  await page.click('#keypadBtn');
+  await page.click('#keypad button:nth-child(5)');
+  assert.equal(await page.evaluate(() => window.__digits), '5');
+  if (shots) await page.screenshot({ path: join(shots, '5-call.png') });
+  await page.click('#hangBtn');
+  await page.waitForFunction(() => document.querySelector('#callCard').hidden);
+  ok('keypad tones + hang up');
+
+  step = 'app-to-app-call';
+  const page2 = await context.newPage();
+  page2.on('pageerror', (e) => errors.push('page2: ' + e.message));
+  await page2.goto(`http://localhost:${port}/`);
+  await page2.waitForSelector('.preset');
+  await page.evaluate(() => window.voxmorph.selectPreset('chipmunk'));
+  await page.evaluate(() => navigator.clipboard.writeText = async () => {});
+  await page.click('#newRoomBtn');
+  await page.waitForFunction(() => window.voxmorph.calls.p2p);
+  const link = await page.evaluate(() => window.voxmorph.calls.roomLink(window.voxmorph.calls.p2p.room));
+  await page2.goto(link);
+  await page2.waitForFunction(() => document.querySelector('#roomInput').value.length > 0);
+  await page2.click('#joinBtn');
+  for (const p of [page, page2]) await p.waitForFunction(() => /On call/.test(document.querySelector('#callState').textContent), null, { timeout: 20000 });
+  const heard = await page2.evaluate(async () => {
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    const an = ctx.createAnalyser();
+    an.fftSize = 32768;
+    ctx.createMediaStreamSource(window.voxmorph.calls.remoteAudio.srcObject).connect(an);
+    await new Promise((r) => setTimeout(r, 2500));
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    return Array.from(buf);
+  });
+  const p2pPitch = medianOf(detectPitchTrack(Float32Array.from(heard), 48000, 100));
+  // Chipmunk is +10 st: 140 Hz -> ~250 Hz.
+  assert.ok(p2pPitch > 220 && p2pPitch < 280, `app-to-app pitch ${p2pPitch}`);
+  ok(`app-to-app WebRTC call: other person hears ${p2pPitch.toFixed(0)} Hz (Chipmunk) from a 140 Hz mic`);
+  await page.click('#hangBtn');
+  await page2.waitForFunction(() => /Waiting/.test(document.querySelector('#callState').textContent), null, { timeout: 10000 });
+  await page2.click('#hangBtn');
+  ok('hang up on both ends');
 
   step = 'errors';
   const real = errors.filter((e) => !/favicon/.test(e));
