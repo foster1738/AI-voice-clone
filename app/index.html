@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>VoxMorph – AI Voice Changer</title>
+    <meta name="description" content="AI-powered real-time voice changer. Runs on iPhone, Android, Windows and Mac, fully on-device." />
+    <meta name="theme-color" content="#0b0b14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="VoxMorph" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="" width="30" height="30" />
+        <span>Vox<b>Morph</b></span>
+        <span class="ai-badge">AI</span>
+      </div>
+      <div class="top-actions">
+        <button id="installBtn" class="chip" hidden>Install app</button>
+        <span id="status" class="status">Mic off</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card viz">
+        <canvas id="scope" aria-label="Voice visualizer"></canvas>
+        <div class="readouts">
+          <div><small>Your pitch</small><strong id="pitchOut">–</strong></div>
+          <div><small>Voice</small><strong id="voiceName">Natural</strong></div>
+          <div><small>AI denoise</small><strong id="denoiseOut">On</strong></div>
+        </div>
+      </section>
+
+      <!-- LIVE -->
+      <section class="tab" data-tab="live">
+        <div class="controls">
+          <button id="liveBtn" class="big-btn" aria-pressed="false">
+            <span class="icon">🎙️</span><span class="label">Start live</span>
+          </button>
+          <button id="monitorBtn" class="round-btn" aria-pressed="false" title="Hear yourself (use headphones)">🎧<small>Monitor</small></button>
+          <button id="recBtn" class="round-btn rec" aria-pressed="false" title="Record">⏺<small id="recTime">Record</small></button>
+        </div>
+        <p class="hint" id="liveHint">Use headphones for live monitoring to avoid feedback. Recording works without monitoring.</p>
+
+        <div class="cats" id="cats" role="tablist"></div>
+        <div class="presets" id="presets"></div>
+
+        <details class="card custom" id="custom">
+          <summary>🎛️ Customize voice</summary>
+          <div id="sliders" class="sliders"></div>
+          <div class="row">
+            <button id="resetBtn" class="chip">Reset to preset</button>
+            <button id="saveBtn" class="chip primary">Save as my voice</button>
+          </div>
+        </details>
+      </section>
+
+      <!-- STUDIO -->
+      <section class="tab" data-tab="studio" hidden>
+        <div class="row between">
+          <h2>Studio</h2>
+          <label class="chip primary file">Import audio<input type="file" id="importInput" accept="audio/*,video/*" hidden /></label>
+        </div>
+        <p class="hint">Record once, then try every voice on it. Exports are rendered with the voice selected on the Live tab.</p>
+        <div id="takes" class="takes"></div>
+        <p id="noTakes" class="empty">No recordings yet. Tap <b>⏺ Record</b> on the Live tab or import a file.</p>
+      </section>
+
+      <!-- AI -->
+      <section class="tab" data-tab="ai" hidden>
+        <h2>AI Voice Conversion</h2>
+        <p class="hint">
+          Neural voice conversion (RVC) runs entirely on your device. Your voice never leaves it. Load a
+          <b>content encoder</b> (ContentVec ONNX) once, then add any number of <b>RVC voice models</b> (ONNX).
+          Convert recordings from the Studio tab.
+        </p>
+        <div class="card">
+          <div class="row between"><h3>Engine</h3><span id="aiBackend" class="pill">not loaded</span></div>
+          <div class="model-slot" style="margin-top:12px">
+            <div>
+              <strong>Content encoder</strong>
+              <div id="encoderInfo" class="muted">None. Required for all AI voices.</div>
+            </div>
+            <div class="row">
+              <label class="chip file">Import .onnx<input type="file" id="encoderFile" accept=".onnx" hidden /></label>
+              <button class="chip" data-url-for="encoder">From URL</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row between">
+            <h3>AI voices</h3>
+            <div class="row">
+              <label class="chip primary file">Add voice<input type="file" id="voiceFile" accept=".onnx" hidden /></label>
+              <button class="chip" data-url-for="voice">From URL</button>
+            </div>
+          </div>
+          <div id="voices" class="voices"></div>
+          <p id="noVoices" class="empty">No AI voices yet.</p>
+        </div>
+        <div class="card sliders" id="aiSliders"></div>
+        <div id="aiProgress" class="progress" hidden><div></div><span></span></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="tab" data-tab="settings" hidden>
+        <h2>Settings</h2>
+        <div class="card form">
+          <label>Microphone <select id="inputSel"><option value="">Default</option></select></label>
+          <label>Output <select id="outputSel"><option value="">Default</option></select></label>
+          <p class="hint" id="outputHint"></p>
+          <label class="switch"><input type="checkbox" id="aiDenoise" checked /> <span>AI noise suppression (RNNoise)</span></label>
+          <label class="switch"><input type="checkbox" id="browserNs" /> <span>Browser noise suppression</span></label>
+          <label class="switch"><input type="checkbox" id="echoCancel" /> <span>Echo cancellation (for speakers)</span></label>
+        </div>
+        <div class="card">
+          <h3>🧠 Voice Match</h3>
+          <p class="hint">Let the AI learn your natural pitch so that smart voices (Feminine, Masculine, Deep, Child, Giant) land on the right target for <i>your</i> voice.</p>
+          <p class="quote" id="matchText">"The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly."</p>
+          <div class="row">
+            <button id="matchBtn" class="chip primary">Start Voice Match</button>
+            <span id="matchOut" class="muted"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Use in Discord, Zoom, Teams, OBS and games</h3>
+          <ol class="steps">
+            <li>Install a free virtual audio cable: <b>VB-Audio Cable</b> (Windows) or <b>BlackHole</b> (Mac).</li>
+            <li>Here, set <b>Output</b> to the cable ("CABLE Input" / "BlackHole 2ch") and turn on <b>🎧 Monitor</b>.</li>
+            <li>In the other app, choose the cable ("CABLE Output" / "BlackHole 2ch") as the microphone.</li>
+          </ol>
+        </div>
+        <div class="card muted small">
+          <p>VoxMorph processes all audio on your device. Recordings and AI models are stored locally in your browser.</p>
+          <p id="version"></p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button data-go="live" class="active"><span>🎙️</span>Live</button>
+      <button data-go="studio"><span>🎚️</span>Studio</button>
+      <button data-go="ai"><span>🧠</span>AI Voices</button>
+      <button data-go="settings"><span>⚙️</span>Settings</button>
+    </nav>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

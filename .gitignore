@@ -1,0 +1,7 @@
+node_modules/
+dist/
+app/vendor/ort/
+ios/
+android/
+*.log
+.DS_Store

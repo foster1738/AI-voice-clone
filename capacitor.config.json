@@ -1,0 +1,7 @@
+{
+  "appId": "app.voxmorph.voicechanger",
+  "appName": "VoxMorph",
+  "webDir": "app",
+  "ios": { "contentInset": "never", "backgroundColor": "#0b0b14" },
+  "android": { "backgroundColor": "#0b0b14" }
+}

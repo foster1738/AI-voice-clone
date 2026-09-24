@@ -1,0 +1,75 @@
+{
+  "name": "voxmorph",
+  "productName": "VoxMorph",
+  "version": "1.0.0",
+  "description": "AI-powered voice changer for iPhone, Android, Windows and macOS",
+  "type": "module",
+  "private": true,
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "vendor": "node scripts/vendor.mjs",
+    "desktop": "npm run vendor && electron .",
+    "dist:win": "npm run vendor && electron-builder --win",
+    "dist:mac": "npm run vendor && electron-builder --mac",
+    "dist:linux": "npm run vendor && electron-builder --linux",
+    "mobile:sync": "npm run vendor && cap sync && node scripts/mobile-permissions.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "onnxruntime-node": "1.23.0",
+    "onnxruntime-web": "1.30.0",
+    "playwright": "1.56.1"
+  },
+  "author": "VoxMorph",
+  "build": {
+    "appId": "app.voxmorph.voicechanger",
+    "productName": "VoxMorph",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**",
+      "app/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "app/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.music",
+      "icon": "app/icons/icon-512.png",
+      "hardenedRuntime": true,
+      "entitlements": "desktop/entitlements.mac.plist",
+      "entitlementsInherit": "desktop/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "VoxMorph uses the microphone to change your voice."
+      }
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Audio",
+      "icon": "app/icons/icon-512.png"
+    }
+  }
+}
